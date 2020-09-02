@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>使用js调用设备摄像头并实现拍照</title>
+    <script src="https://cdn.bootcss.com/zepto/1.2.0/zepto.min.js"></script>
+    <style type="text/css">
+        *{
+            margin:0;
+            padding:0
+        }
+        video{
+            width:200px;
+            position: absolute;
+            transform: translate(50%,30%);
+
+        }
+        button{width:100px;height:60px}
+        .box {
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <div id="container">
+        <video id="gum" autoplay muted></video>
+        <div>
+            <button id="record" disabled>开始录制</button>
+            <button id="upload" disabled>上传</button>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    var mediaSource = new MediaSource();
+    mediaSource.addEventListener('sourceopen', handleSourceOpen, false);
+    var mediaRecorder;
+    var recordedBlobs;
+    var sourceBuffer;
+
+    var gumVideo = document.querySelector('video#gum');
+
+    var recordButton = document.querySelector('button#record');
+    var uploadButton = document.querySelector('button#upload');
+    recordButton.onclick = toggleRecording;
+    uploadButton.onclick = upload;
+
+    // window.isSecureContext could be used for Chrome
+    var isSecureOrigin = location.protocol === 'https:' || location.hostname === 'localhost';
+    if (!isSecureOrigin) {
+        alert('getUserMedia()必须跑在https或者localhost上');
+        location.protocol = 'HTTPS';
+    }
+
+    var constraints = {
+        audio: true,
+        video: {
+            width:200,//视频宽度
+            height:200,//视频高度
+            frameRate:60,//每秒60帧
+        }
+    };
+
+    function handleSuccess(stream) {
+        recordButton.disabled = false;
+        console.log('getUserMedia() got stream: ', stream);
+        window.stream = stream;
+        gumVideo.srcObject = stream;
+    }
+
+    function handleError(error) {
+        console.log('navigator.getUserMedia error: ', error);
+    }
+
+    navigator.mediaDevices.getUserMedia(constraints).
+    then(handleSuccess).catch(handleError);
+
+    function handleSourceOpen(event) {
+        console.log('MediaSource opened');
+        sourceBuffer = mediaSource.addSourceBuffer('video/webm; codecs="vp8"');
+        console.log('Source buffer: ', sourceBuffer);
+    }
+
+
+    function handleDataAvailable(event) {
+        if (event.data && event.data.size > 0) {
+            recordedBlobs.push(event.data);
+        }
+    }
+
+    function handleStop(event) {
+        console.log('Recorder stopped: ', event);
+    }
+
+    function toggleRecording() {
+        if (recordButton.textContent === '开始录制') {
+            startRecording();
+        } else {
+            stopRecording();
+            recordButton.textContent = '开始录制';
+            uploadButton.disabled = false;
+        }
+    }
+
+    function startRecording() {
+        recordedBlobs = [];
+        var options = {mimeType: 'video/webm;codecs=h264'};
+        try {
+            mediaRecorder = new MediaRecorder(window.stream, options);
+        } catch (e) {
+            console.error('Exception while creating MediaRecorder: ' + e);
+            alert('Exception while creating MediaRecorder: '
+                + e + '. mimeType: ' + options.mimeType);
+            return;
+        }
+        console.log('Created MediaRecorder', mediaRecorder, 'with options', options);
+        recordButton.textContent = '结束录制';
+        uploadButton.disabled = true;
+        mediaRecorder.onstop = handleStop;
+        mediaRecorder.ondataavailable = handleDataAvailable;
+        mediaRecorder.start(10); // collect 10ms of data
+        console.log('MediaRecorder started', mediaRecorder);
+    }
+
+    function stopRecording() {
+        mediaRecorder.stop();
+        console.log('录像的 Blobs数据: ', recordedBlobs);
+        alert("数据==="+recordedBlobs);
+    }
+
+    function upload(){
+        //保存在本地，通过post请求
+        //还可以用append方法添加一些附加信息参数为(name,value)，如下面的代码：
+        var blob = new Blob(recordedBlobs, {type: 'video/mp4'});
+        var formData = new FormData();
+        formData.append('video', blob);
+
+        // $.ajax({
+        //     type: "POST",
+        //     url: "/user/vertify",
+        //     data: formData,
+        //     processData:false,   //  告诉jquery不要处理发送的数据
+        //     contentType:false,    // 告诉jquery不要设置content-Type请求头
+        //     success:function(res){
+        //         console.log(res);
+        //     }
+        // });
+    }
+
+</script>
+</body>
+</html>
